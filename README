@@ -1,0 +1,49 @@
+# Funnel Event Analysis — SQL
+
+## Approach
+
+I used SQL to analyse this dataset. To begin, I created a schema and then imported the CSV file as a table using the import wizard.
+
+## Step 1: Unique users per step
+
+To check the unique user counts, I ran:
+
+```sql
+SELECT step, COUNT(DISTINCT user_id) AS unique_users
+FROM funnel_events_sample_table
+GROUP BY step;
+```
+
+This dataset has 200 unique users total, confirmed by the `visited_site` step showing 200 users.
+
+## Step 2: Stage order, conversion rate, and users lost
+
+To get the user count at each step in the correct funnel order, along with the conversion rate and drop-off from the previous stage, I used a CTE combined with window functions:
+
+```sql
+WITH stage_counts AS (
+    SELECT
+        step,
+        COUNT(DISTINCT user_id) AS unique_users,
+        FIELD(step, 'visited_site','signup_started','details_filled','email_verified','purchase_completed') AS stage_order
+    FROM funnel_events_sample_table
+    GROUP BY step
+)
+SELECT
+    step,
+    unique_users,
+    stage_order,
+    LAG(unique_users) OVER (ORDER BY stage_order) AS prev_stage_users,
+    ROUND(100.0 * unique_users / LAG(unique_users) OVER (ORDER BY stage_order), 1) AS conversion_pct,
+    LAG(unique_users) OVER (ORDER BY stage_order) - unique_users AS users_lost
+FROM stage_counts
+ORDER BY stage_order;
+```
+
+Here I used the `FIELD()` function to force the steps into their correct funnel order (since alphabetical order isn't the right order), then used `LAG()` as a window function to pull each stage's previous-stage value in the same row, so I could calculate conversion percentage and users lost directly in SQL.
+
+
+
+## Summary
+
+I used a CTE with window functions (`FIELD`, `LAG`, `RANK`) to find each stage's unique user count and how many users dropped off from the previous stage.
